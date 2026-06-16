@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Parental Control</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #F0F2F5;
+    min-height: 100vh;
+    padding-bottom: 30px;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #1565C0, #7B1FA2);
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .logout {
+    background: rgba(255,255,255,.18);
+    color: white;
+    border: none;
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .page { max-width: 700px; margin: 0 auto; padding: 18px 14px; }
+
+  .alert {
+    display: none;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    margin-bottom: 14px;
+    font-weight: 500;
+  }
+  .alert.show { display: block; }
+  .alert-ok  { background: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
+  .alert-err { background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
+
+  .card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #444;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Status */
+  #status-box { font-size: 14px; color: #555; min-height: 50px; }
+  .sess-row {
+    background: #F1F8E9;
+    border-left: 4px solid #66BB6A;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .sess-user { font-weight: 700; color: #2E7D32; font-size: 14px; }
+  .sess-meta { font-size: 12px; color: #666; margin-top: 3px; }
+  .no-sess { color: #aaa; font-style: italic; }
+
+  /* User selector */
+  select {
+    width: 100%;
+    padding: 11px 12px;
+    border: 2px solid #E0E0E0;
+    border-radius: 10px;
+    font-size: 15px;
+    background: white;
+    color: #333;
+  }
+  select:focus { outline: none; border-color: #1565C0; }
+
+  /* Quick actions grid */
+  .qa-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .qa-btn {
+    background: white;
+    border: 2px solid #E8EAF6;
+    border-radius: 12px;
+    padding: 16px 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+    user-select: none;
+  }
+  .qa-btn:active { transform: scale(.97); }
+  .qa-btn:hover  { border-color: #5C6BC0; box-shadow: 0 4px 12px rgba(92,107,192,.18); }
+  .qa-icon  { font-size: 28px; margin-bottom: 6px; }
+  .qa-title { font-size: 13px; font-weight: 700; color: #333; }
+  .qa-sub   { font-size: 11px; color: #888; margin-top: 2px; }
+
+  /* Custom session */
+  .field-label { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+  input[type=number] {
+    width: 100%;
+    padding: 11px 12px;
+    border: 2px solid #E0E0E0;
+    border-radius: 10px;
+    font-size: 15px;
+    margin-bottom: 14px;
+  }
+  input[type=number]:focus { outline: none; border-color: #1565C0; }
+
+  .check-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .check-item { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #444; cursor: pointer; }
+  .check-item input { width: 16px; height: 16px; cursor: pointer; accent-color: #1565C0; }
+
+  .btn-row { display: flex; gap: 10px; }
+  .btn {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity .2s;
+  }
+  .btn:active { opacity: .85; }
+  .btn-start { background: #43A047; color: white; }
+  .btn-end   { background: #E53935; color: white; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🖥️ Parental Control</h1>
+  <a href="/logout" class="logout">Logout</a>
+</div>
+
+<div class="page">
+
+  <div id="alert" class="alert"></div>
+
+  <!-- Status -->
+  <div class="card">
+    <div class="card-title">📊 Active Sessions</div>
+    <div id="status-box"><em>Loading…</em></div>
+  </div>
+
+  <!-- User select -->
+  <div class="card">
+    <div class="card-title">👤 Child Account</div>
+    <select id="user-select"><option value="">Loading…</option></select>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="card">
+    <div class="card-title">⚡ Quick Actions</div>
+    <div class="qa-grid">
+      <div class="qa-btn" onclick="quickAction('gaming_1hr')">
+        <div class="qa-icon">🎮</div>
+        <div class="qa-title">Gaming 1 hr</div>
+        <div class="qa-sub">Browsers blocked</div>
+      </div>
+      <div class="qa-btn" onclick="quickAction('gaming_2hr')">
+        <div class="qa-icon">🎮</div>
+        <div class="qa-title">Gaming 2 hr</div>
+        <div class="qa-sub">Browsers blocked</div>
+      </div>
+      <div class="qa-btn" onclick="quickAction('homework_1hr')">
+        <div class="qa-icon">📚</div>
+        <div class="qa-title">Homework 1 hr</div>
+        <div class="qa-sub">Games + social blocked</div>
+      </div>
+      <div class="qa-btn" onclick="quickAction('homework_2hr')">
+        <div class="qa-icon">📚</div>
+        <div class="qa-title">Homework 2 hr</div>
+        <div class="qa-sub">Games + social blocked</div>
+      </div>
+      <div class="qa-btn" onclick="quickAction('free_1hr')">
+        <div class="qa-icon">✨</div>
+        <div class="qa-title">Free Time 1 hr</div>
+        <div class="qa-sub">No restrictions</div>
+      </div>
+      <div class="qa-btn" onclick="quickAction('free_2hr')">
+        <div class="qa-icon">✨</div>
+        <div class="qa-title">Free Time 2 hr</div>
+        <div class="qa-sub">No restrictions</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom session -->
+  <div class="card">
+    <div class="card-title">⚙️ Custom Session</div>
+
+    <div class="field-label">Duration (minutes)</div>
+    <input type="number" id="duration" value="60" min="1" max="480">
+
+    <div class="field-label">Block Programs</div>
+    <div class="check-grid">
+      <label class="check-item"><input type="checkbox" value="chrome.exe" class="prog"> Chrome</label>
+      <label class="check-item"><input type="checkbox" value="firefox.exe" class="prog"> Firefox</label>
+      <label class="check-item"><input type="checkbox" value="msedge.exe" class="prog"> Edge</label>
+      <label class="check-item"><input type="checkbox" value="Minecraft.exe" class="prog"> Minecraft</label>
+      <label class="check-item"><input type="checkbox" value="MinecraftLauncher.exe" class="prog"> MC Launcher</label>
+      <label class="check-item"><input type="checkbox" value="RobloxPlayerBeta.exe" class="prog"> Roblox</label>
+      <label class="check-item"><input type="checkbox" value="steam.exe" class="prog"> Steam</label>
+    </div>
+
+    <div class="field-label">Block Websites</div>
+    <div class="check-grid">
+      <label class="check-item"><input type="checkbox" value="youtube.com" class="site"> YouTube</label>
+      <label class="check-item"><input type="checkbox" value="tiktok.com" class="site"> TikTok</label>
+      <label class="check-item"><input type="checkbox" value="instagram.com" class="site"> Instagram</label>
+      <label class="check-item"><input type="checkbox" value="facebook.com" class="site"> Facebook</label>
+      <label class="check-item"><input type="checkbox" value="twitter.com" class="site"> Twitter / X</label>
+      <label class="check-item"><input type="checkbox" value="twitch.tv" class="site"> Twitch</label>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-start" onclick="startCustom()">▶ Start</button>
+      <button class="btn btn-end"   onclick="endSession()">■ End Session</button>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+let selectedUser = '';
+
+// Load controlled user accounts
+fetch('/api/users')
+  .then(r => r.json())
+  .then(data => {
+    const sel = document.getElementById('user-select');
+    if (data.users && data.users.length) {
+      sel.innerHTML = data.users.map(u => `<option value="${u}">${u}</option>`).join('');
+      selectedUser = data.users[0];
+      sel.value = selectedUser;
+    } else {
+      sel.innerHTML = '<option value="">No child accounts configured</option>';
+      flash('No child accounts found. Open the desktop app and check the accounts to monitor.', 'err');
+    }
+    sel.addEventListener('change', () => { selectedUser = sel.value; });
+  });
+
+// Status refresh
+function refreshStatus() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const box = document.getElementById('status-box');
+      if (!data.active || !data.sessions.length) {
+        box.innerHTML = '<span class="no-sess">No active sessions.</span>';
+        return;
+      }
+      box.innerHTML = data.sessions.map(s => `
+        <div class="sess-row">
+          <div class="sess-user">👤 ${s.username} — ${s.minutes_left} min left (ends ${s.end_time})</div>
+          <div class="sess-meta">
+            ${s.blocked_programs.length ? 'Programs: ' + s.blocked_programs.join(', ') : ''}
+            ${s.blocked_programs.length && s.blocked_websites.length ? ' · ' : ''}
+            ${s.blocked_websites.length  ? 'Sites: '    + s.blocked_websites.join(', ')  : ''}
+            ${!s.blocked_programs.length && !s.blocked_websites.length ? 'No restrictions' : ''}
+          </div>
+        </div>`).join('');
+    });
+}
+refreshStatus();
+setInterval(refreshStatus, 5000);
+
+function flash(msg, type) {
+  const el = document.getElementById('alert');
+  el.textContent = msg;
+  el.className = `alert show alert-${type === 'err' ? 'err' : 'ok'}`;
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+
+function getUser() {
+  if (!selectedUser) { flash('Please select a child account first.', 'err'); return null; }
+  return selectedUser;
+}
+
+function quickAction(action) {
+  const user = getUser(); if (!user) return;
+  if (!confirm(`Start session for ${user}?`)) return;
+  fetch(`/api/quick_action/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user })
+  }).then(r => r.json()).then(d => {
+    flash(d.message, d.success ? 'ok' : 'err');
+    if (d.success) refreshStatus();
+  });
+}
+
+function startCustom() {
+  const user = getUser(); if (!user) return;
+  const duration = parseInt(document.getElementById('duration').value);
+  if (!duration || duration < 1) { flash('Enter a valid duration.', 'err'); return; }
+  const progs  = [...document.querySelectorAll('.prog:checked')].map(e => e.value);
+  const sites  = [...document.querySelectorAll('.site:checked')].map(e => e.value);
+  fetch('/api/start_session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user, duration, blocked_programs: progs, blocked_websites: sites })
+  }).then(r => r.json()).then(d => {
+    flash(d.message, d.success ? 'ok' : 'err');
+    if (d.success) refreshStatus();
+  });
+}
+
+function endSession() {
+  const user = getUser(); if (!user) return;
+  if (!confirm(`End session for ${user}?`)) return;
+  fetch('/api/end_session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user })
+  }).then(r => r.json()).then(d => {
+    flash(d.message, d.success ? 'ok' : 'err');
+    if (d.success) refreshStatus();
+  });
+}
+</script>
+</body>
+</html>
