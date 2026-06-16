@@ -1,0 +1,129 @@
+"""
+Parental Control System - Background Service
+Runs without a GUI. Used with NSSM or Task Scheduler so monitoring
+works even when no one is logged in.
+"""
+
+import json
+import os
+import sys
+import time
+import subprocess
+from datetime import datetime
+
+import psutil
+
+
+CONFIG_FILE = "parental_config.json"
+
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"controlled_users": [], "active_sessions": {}}
+
+
+def save_config(config):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+def get_process_owner(pid):
+    try:
+        import win32api, win32con, win32security
+        handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION, False, pid)
+        token = win32security.OpenProcessToken(handle, win32con.TOKEN_QUERY)
+        sid = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
+        return win32security.LookupAccountSid(None, sid)[0].lower()
+    except Exception:
+        return None
+
+
+def terminate_for_user(process_name, username):
+    for proc in psutil.process_iter(["name", "pid"]):
+        try:
+            if proc.info["name"].lower() == process_name.lower():
+                if get_process_owner(proc.info["pid"]) == username.lower():
+                    proc.terminate()
+                    log(f"Terminated {process_name} for {username}")
+        except Exception:
+            pass
+
+
+def update_hosts(blocked_sites):
+    hosts = r"C:\Windows\System32\drivers\etc\hosts"
+    try:
+        with open(hosts, "r") as f:
+            lines = [l for l in f if "# PARENTAL_CONTROL" not in l]
+        for site in blocked_sites:
+            lines.append(f"127.0.0.1 {site} # PARENTAL_CONTROL\n")
+            lines.append(f"127.0.0.1 www.{site} # PARENTAL_CONTROL\n")
+        with open(hosts, "w") as f:
+            f.writelines(lines)
+        subprocess.run(["ipconfig", "/flushdns"], capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW)
+    except Exception as e:
+        log(f"Hosts file error: {e}")
+
+
+def log(msg):
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
+
+
+def run():
+    # Work from the folder where this script lives
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    log("Parental Control Service started.")
+    log(f"Config: {os.path.abspath(CONFIG_FILE)}")
+
+    last_sites: set = set()
+
+    while True:
+        try:
+            config = load_config()
+            now = datetime.now()
+            sessions = config.get("active_sessions", {})
+            changed = False
+            all_sites: set = set()
+
+            for username in list(sessions.keys()):
+                s = sessions[username]
+                end = datetime.fromisoformat(s["end_time"])
+
+                if now > end:
+                    log(f"Session expired for {username}")
+                    del sessions[username]
+                    changed = True
+                    continue
+
+                for prog in s.get("blocked_programs", []):
+                    terminate_for_user(prog, username)
+
+                all_sites.update(s.get("blocked_websites", []))
+
+            if changed:
+                config["active_sessions"] = sessions
+                save_config(config)
+
+            if all_sites != last_sites:
+                update_hosts(all_sites)
+                last_sites = all_sites
+
+        except Exception as e:
+            log(f"Error: {e}")
+
+        time.sleep(2)
+
+
+if __name__ == "__main__":
+    if sys.platform != "win32":
+        print("Windows only.")
+        sys.exit(1)
+    try:
+        run()
+    except KeyboardInterrupt:
+        log("Service stopped.")
