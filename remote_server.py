@@ -8,6 +8,7 @@ import os
 import json
 import hashlib
 import secrets
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -17,6 +18,15 @@ CONFIG_FILE = "parental_config.json"
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
+
+# Suppress noisy polling requests from the status log
+log = logging.getLogger("werkzeug")
+
+class _StatusFilter(logging.Filter):
+    def filter(self, record):
+        return "/api/status" not in record.getMessage()
+
+log.addFilter(_StatusFilter())
 
 QUICK_ACTIONS = {
     "gaming_1hr": {
@@ -148,8 +158,6 @@ def api_status():
     for username, s in list(sessions.items()):
         end = datetime.fromisoformat(s["end_time"])
         if now > end:
-            del sessions[username]
-            changed = True
             continue
         mins = int((end - now).total_seconds() / 60)
         result.append({
@@ -159,10 +167,6 @@ def api_status():
             "blocked_programs": s.get("blocked_programs", []),
             "blocked_websites": s.get("blocked_websites", []),
         })
-
-    if changed:
-        config["active_sessions"] = sessions
-        save_config(config)
 
     return jsonify({"active": bool(result), "sessions": result})
 
