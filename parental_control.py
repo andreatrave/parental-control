@@ -97,15 +97,67 @@ def terminate_process_for_user(process_name, username):
             pass
 
 
+# Hidden domain expansions - applied automatically when a primary domain is blocked
+DOMAIN_EXPANSIONS = {
+    "youtube.com": [
+        "youtube.com",
+        "googlevideo.com",
+        "ytimg.com",
+        "yt3.ggpht.com",
+        "youtubekids.com",
+        "youtube-nocookie.com",
+        "yt.be",
+    ],
+    "instagram.com": [
+        "instagram.com",
+        "cdninstagram.com",
+    ],
+    "tiktok.com": [
+        "tiktok.com",
+        "tiktokcdn.com",
+        "tiktokv.com",
+        "musical.ly",
+    ],
+    "facebook.com": [
+        "facebook.com",
+        "fbcdn.net",
+        "fbsbx.com",
+    ],
+    "twitter.com": [
+        "twitter.com",
+        "x.com",
+        "t.co",
+        "twimg.com",
+    ],
+    "twitch.tv": [
+        "twitch.tv",
+        "twitchapps.com",
+        "jtvnw.net",
+        "twitchsvc.net",
+    ],
+}
+
+def expand_domains(blocked_sites):
+    """Expand each blocked site to include all related domains transparently."""
+    expanded = set()
+    for site in blocked_sites:
+        if site in DOMAIN_EXPANSIONS:
+            expanded.update(DOMAIN_EXPANSIONS[site])
+        else:
+            expanded.add(site)
+    return expanded
+
+
 def update_hosts_file(blocked_sites):
     """Replace all PARENTAL_CONTROL entries in the hosts file."""
     if not is_admin():
         return False
     hosts_path = r"C:\Windows\System32\drivers\etc\hosts"
+    all_domains = expand_domains(blocked_sites)
     try:
         with open(hosts_path, "r") as f:
             lines = [l for l in f.readlines() if "# PARENTAL_CONTROL" not in l]
-        for site in blocked_sites:
+        for site in sorted(all_domains):
             lines.append(f"127.0.0.1 {site} # PARENTAL_CONTROL\n")
             lines.append(f"127.0.0.1 www.{site} # PARENTAL_CONTROL\n")
         with open(hosts_path, "w") as f:
