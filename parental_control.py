@@ -148,6 +148,13 @@ def expand_domains(blocked_sites):
     return expanded
 
 
+def get_effective_restrictions(username, session=None, default_programs=None, default_websites=None):
+    """Return the active restrictions for a user, falling back to lockdown defaults when no session exists."""
+    if session is not None:
+        return session.get("blocked_programs", []), session.get("blocked_websites", [])
+    return (default_programs or []), (default_websites or [])
+
+
 def update_hosts_file(blocked_sites):
     """Replace all PARENTAL_CONTROL entries in the hosts file."""
     if not is_admin():
@@ -233,21 +240,30 @@ class Monitor:
                 sessions = config.get("active_sessions", {})
                 changed = False
                 all_sites = set()
+                controlled_users = list(dict.fromkeys(config.get("controlled_users", []) + list(sessions.keys())))
 
-                for username in list(sessions.keys()):
-                    session = sessions[username]
+                for username in controlled_users:
+                    session = sessions.get(username)
+                    if session is None:
+                        continue
+
                     end_time = datetime.fromisoformat(session["end_time"])
-
                     if now > end_time:
                         del sessions[username]
                         changed = True
                         continue
 
-                    # Block programs
-                    for prog in session.get("blocked_programs", []):
+                    blocked_programs, blocked_websites = get_effective_restrictions(
+                        username,
+                        session=session,
+                        default_programs=PROGRAMS,
+                        default_websites=WEBSITES,
+                    )
+
+                    for prog in blocked_programs:
                         terminate_process_for_user(prog, username)
 
-                    all_sites.update(session.get("blocked_websites", []))
+                    all_sites.update(blocked_websites)
 
                 if changed:
                     config["active_sessions"] = sessions

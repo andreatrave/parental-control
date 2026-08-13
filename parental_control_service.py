@@ -15,6 +15,24 @@ import psutil
 
 
 CONFIG_FILE = "parental_config.json"
+DEFAULT_LOCKDOWN_PROGRAMS = [
+    "chrome.exe",
+    "firefox.exe",
+    "msedge.exe",
+    "Minecraft.exe",
+    "MinecraftLauncher.exe",
+    "RobloxPlayerBeta.exe",
+    "steam.exe",
+]
+DEFAULT_LOCKDOWN_WEBSITES = [
+    "youtube.com",
+    "tiktok.com",
+    "instagram.com",
+    "facebook.com",
+    "twitter.com",
+    "x.com",
+    "twitch.tv",
+]
 
 
 def load_config():
@@ -105,6 +123,13 @@ def expand_domains(blocked_sites):
     return expanded
 
 
+def get_effective_restrictions(username, session=None, default_programs=None, default_websites=None):
+    """Return the active restrictions for a user, falling back to lockdown defaults when no session exists."""
+    if session is not None:
+        return session.get("blocked_programs", []), session.get("blocked_websites", [])
+    return (default_programs or []), (default_websites or [])
+
+
 def update_hosts(blocked_sites):
     hosts = r"C:\Windows\System32\drivers\etc\hosts"
     all_domains = expand_domains(blocked_sites)
@@ -141,21 +166,31 @@ def run():
             sessions = config.get("active_sessions", {})
             changed = False
             all_sites: set = set()
+            controlled_users = list(dict.fromkeys(config.get("controlled_users", []) + list(sessions.keys())))
 
-            for username in list(sessions.keys()):
-                s = sessions[username]
-                end = datetime.fromisoformat(s["end_time"])
+            for username in controlled_users:
+                session = sessions.get(username)
+                if session is None:
+                    continue
 
+                end = datetime.fromisoformat(session["end_time"])
                 if now > end:
                     log(f"Session expired for {username}")
                     del sessions[username]
                     changed = True
                     continue
 
-                for prog in s.get("blocked_programs", []):
+                blocked_programs, blocked_websites = get_effective_restrictions(
+                    username,
+                    session=session,
+                    default_programs=DEFAULT_LOCKDOWN_PROGRAMS,
+                    default_websites=DEFAULT_LOCKDOWN_WEBSITES,
+                )
+
+                for prog in blocked_programs:
                     terminate_for_user(prog, username)
 
-                all_sites.update(s.get("blocked_websites", []))
+                all_sites.update(blocked_websites)
 
             if changed:
                 config["active_sessions"] = sessions
